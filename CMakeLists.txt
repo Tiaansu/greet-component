@@ -1,0 +1,84 @@
+cmake_minimum_required(VERSION 3.19)
+project(greet LANGUAGES C CXX VERSION 0.0.1)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH true)
+
+if (WIN32)
+    add_definitions(
+            -D_CRT_SECURE_NO_WARNINGS
+            -DWIN32_LEAN_AND_MEAN
+    )
+    add_compile_options(/MP)
+endif ()
+
+include_directories(
+	deps
+	deps/pawn/source
+	deps/pawn/source/linux
+)
+
+add_definitions(
+	-DHAVE_STDINT_H=1
+	-DPAWN_CELL_SIZE=32
+)
+
+function(GroupSourcesByFolder target)
+    set(SOURCE_GROUP_DELIMITER "/")
+    set(last_dir "")
+    set(files "")
+
+    get_target_property(sources ${target} SOURCES)
+
+    foreach(file ${sources})
+        file(RELATIVE_PATH relative_file "${CMAKE_CURRENT_SOURCE_DIR}" ${file})
+        get_filename_component(dir "${relative_file}" PATH)
+        if(NOT "${dir}" STREQUAL "${last_dir}")
+            if(files)
+                source_group("${last_dir}" FILES ${files})
+            endif()
+            set(files "")
+        endif()
+        set(files ${files} ${file})
+        set(last_dir "${dir}")
+    endforeach()
+
+    if(files)
+        source_group("${last_dir}" FILES ${files})
+    endif()
+endfunction()
+
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    if (NOT TARGET_BUILD_ARCH)
+        if (MSVC_CXX_ARCHITECTURE_ID)
+            string(TOLOWER ${MSVC_CXX_ARCHITECTURE_ID} LOWERCASE_CMAKE_SYSTEM_PROCESSOR)
+            if (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(x64|x86_64|amd64)")
+                set(TARGET_BUILD_ARCH x64)
+            elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(i[3-6]86|x86)")
+                set(TARGET_BUILD_ARCH x86)
+            else ()
+                message(FATAL_ERROR "MSVC Arch ID: Unknown CPU '${LOWERCASE_CMAKE_SYSTEM_PROCESSOR}'")
+            endif ()
+        else ()
+            if (CMAKE_SYSTEM_PROCESSOR MATCHES "(x64|x86_64|amd64)")
+                set(TARGET_BUILD_ARCH x64)
+            elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "(i[3-6]86|x86)")
+                set(TARGET_BUILD_ARCH x86)
+                set(CMAKE_C_FLAGS "-m32 ${CMAKE_C_FLAGS}")
+                set(CMAKE_CXX_FLAGS "-m32 ${CMAKE_CXX_FLAGS}")
+                set(CMAKE_SIZEOF_VOID_P 4)
+            else ()
+                if (CMAKE_SYSTEM_PROCESSOR MATCHES "(arm64)")
+                    set(TARGET_BUILD_ARCH armv8)
+                else ()
+                    set(TARGET_BUILD_ARCH x86)
+                endif ()
+            endif ()
+        endif ()
+    endif()
+
+    add_subdirectory(deps/omp-logger)
+    add_subdirectory(deps/omp-sdk)
+
+    add_subdirectory(src)
+endif()
